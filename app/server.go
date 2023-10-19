@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 )
@@ -12,13 +13,17 @@ func main() {
 	}
 
 	log.Println("Listening on 4221")
+
 	conn, err := l.Accept()
 	if err != nil {
 		log.Fatalf("Error accepting connection: %s", err.Error())
 	}
 
-	_, err = conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+	_, err = fmt.Fprintf(conn, "%s", "HTTP/1.1 200 OK\r\n\r\n")
 	if err != nil {
 		log.Fatalf("Failed to respond %v", err)
 	}
+
+	conn.Close()
+
 }

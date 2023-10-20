@@ -33,13 +33,15 @@ func main() {
 	}
 	log.Println("Listening on " + port)
 
-	// listen to incoming connections
-	conn, err := l.Accept()
-	if err != nil {
-		log.Fatalf("Error accepting connection: %s", err.Error())
-	}
+	for {
+		// listen to incoming connections
+		conn, err := l.Accept()
+		if err != nil {
+			log.Fatalf("Error accepting connection: %s", err.Error())
+		}
 
-	handleConn(conn)
+		go handleConn(conn)
+	}
 }
 
 func readRequest(conn net.Conn) (*Request, error) {

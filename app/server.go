@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"log"
 	"net"
@@ -9,13 +8,16 @@ import (
 )
 
 const (
-	lineTerminator = "\r\n"
-	port           = "4221"
+	lineTerminator       = "\r\n"
+	doubleLineTerminator = "\r\n\r\n"
+	port                 = "4221"
 )
 
 type Request struct {
-	method string
-	path   string
+	method  string
+	path    string
+	headers map[string]string
+	body    string
 }
 
 type Response struct {
@@ -40,30 +42,55 @@ func main() {
 	handleConn(conn)
 }
 
-func parseRequest(conn net.Conn) (*Request, error) {
-	lines := readRequestLines(conn)
-	method, path, ok := parseStatusLineParts(lines[0])
-	if !ok {
-		return nil, fmt.Errorf("failed to parse request status line %s", lines[0])
+func readRequest(conn net.Conn) (*Request, error) {
+	buffer := make([]byte, 4096)
+	n, err := conn.Read(buffer)
+	if err != nil {
+		return nil, err
 	}
-	req := &Request{
-		method: method,
-		path:   path,
-	}
-	return req, nil
+	return NewRequest(string(buffer[0:n]))
 }
 
-func readRequestLines(conn net.Conn) []string {
-	lines := []string{}
-	reader := bufio.NewReader(conn)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil || line == "\r\n" {
-			break
-		}
-		lines = append(lines, line)
+func NewRequest(s string) (*Request, error) {
+	req := &Request{headers: map[string]string{}}
+
+	statusLineAndHeaders, body, ok := strings.Cut(s, doubleLineTerminator)
+	if !ok {
+		return nil, fmt.Errorf("invalid request")
 	}
-	return lines
+
+	statusLine, headers, ok := strings.Cut(statusLineAndHeaders, lineTerminator)
+	if !ok {
+		return nil, fmt.Errorf("invalid request")
+	}
+
+	// fmt.Printf("%q\n", statusLine)
+	// fmt.Printf("%q\n", headers)
+	// fmt.Printf("%q\n", body)
+
+	// Parse status line (first line)
+	method, path, ok := parseStatusLineParts(statusLine)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse request status line %s", statusLine)
+	}
+	req.method = method
+	req.path = path
+
+	// Parse headers
+	if len(headers) > 0 {
+		for _, h := range strings.Split(headers, lineTerminator) {
+			k, v, _ := strings.Cut(h, ":")
+			req.headers[strings.ToLower(strings.TrimSpace(k))] = strings.ToLower(strings.TrimSpace(v))
+		}
+	}
+
+	// Parse body
+	if len(body) > 0 {
+		fmt.Println("body:", body)
+		req.body = body
+	}
+
+	return req, nil
 }
 
 func parseStatusLineParts(statusLine string) (string, string, bool) {
@@ -79,7 +106,7 @@ func handleConn(conn net.Conn) {
 	defer conn.Close()
 
 	// Read and parse request
-	req, err := parseRequest(conn)
+	req, err := readRequest(conn)
 	if err != nil {
 		log.Printf("failed to parse request: %v\n", err)
 		return
@@ -128,13 +155,32 @@ func handleRequest(req *Request) Response {
 		return Response{status: "HTTP/1.1 200 OK", headers: defaultHeaders}
 	}
 	if strings.HasPrefix(req.path, "/echo/") {
-		return handleEcho(req.path)
+		return handleGetEcho(req)
+	}
+	if strings.HasPrefix(req.path, "/user-agent") {
+		return handleGetUserAgent(req)
 	}
 	return Response{status: "HTTP/1.1 404 Not Found", headers: defaultHeaders}
 }
 
-func handleEcho(path string) Response {
-	path = strings.TrimPrefix(path, "/")
+func handleGetUserAgent(req *Request) Response {
+	body := ""
+	if v, ok := req.headers["user-agent"]; ok {
+		body = v
+	}
+
+	return Response{
+		status: "HTTP/1.1 200 OK",
+		body:   body,
+		headers: map[string]string{
+			"Content-Type":   "text/plain",
+			"Content-Length": fmt.Sprintf("%d", len(body)),
+		},
+	}
+}
+
+func handleGetEcho(req *Request) Response {
+	path := strings.TrimPrefix(req.path, "/")
 	_, content, _ := strings.Cut(path, "/")
 
 	return Response{

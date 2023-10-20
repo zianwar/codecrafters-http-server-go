@@ -21,7 +21,7 @@ const (
 	contentTypeText HttpContentType = "text/plain"
 
 	httpStatusOk       HttpStatus = "200 Ok"
-	httpStatusNotFound HttpStatus = "400 Not Found"
+	httpStatusNotFound HttpStatus = "404 Not Found"
 )
 
 var (

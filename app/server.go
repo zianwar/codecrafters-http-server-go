@@ -58,17 +58,16 @@ func NewRequest(s string) (*Request, error) {
 
 	statusLineAndHeaders, body, ok := strings.Cut(s, doubleLineTerminator)
 	if !ok {
-		return nil, fmt.Errorf("invalid request")
+		return nil, fmt.Errorf("invalid request 1")
 	}
+	fmt.Printf("statusLineAndHeaders: %q\n", statusLineAndHeaders)
+	fmt.Printf("body: %q\n", body)
 
-	statusLine, headers, ok := strings.Cut(statusLineAndHeaders, lineTerminator)
-	if !ok {
-		return nil, fmt.Errorf("invalid request")
-	}
+	statusLine, headers, _ := strings.Cut(statusLineAndHeaders, lineTerminator)
 
-	// fmt.Printf("%q\n", statusLine)
-	// fmt.Printf("%q\n", headers)
-	// fmt.Printf("%q\n", body)
+	fmt.Printf("statusLine: %q\n", statusLine)
+	fmt.Printf("headers: %q\n", headers)
+	fmt.Printf("body: %q\n", body)
 
 	// Parse status line (first line)
 	method, path, ok := parseStatusLineParts(statusLine)

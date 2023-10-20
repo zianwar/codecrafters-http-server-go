@@ -42,11 +42,19 @@ func handleConn(conn net.Conn) {
 	if !ok {
 		log.Println("Invalid http request")
 	}
-
+	fmt.Println(path)
 	// send response
 	response := "HTTP/1.1 404 Not Found\r\n\r\n"
 	if path == "/" {
 		response = "HTTP/1.1 200 OK\r\n\r\n"
+	} else if strings.HasPrefix(strings.ToLower(path), "/echo/") {
+		_, content, _ := strings.Cut(strings.TrimPrefix(path, "/"), "/")
+		response = strings.Join([]string{
+			"HTTP/1.1 200 OK",
+			"Content-Type: text/plain",
+			fmt.Sprintf("Content-Length: %d\r\n", len(content)),
+			content,
+		}, "\r\n")
 	}
 	_, err = fmt.Fprintf(conn, "%s", response)
 	if err != nil {

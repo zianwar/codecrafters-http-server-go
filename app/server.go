@@ -120,13 +120,17 @@ func (r *Response) Raw() string {
 }
 
 func handleRequest(req *Request) Response {
+	defaultHeaders := map[string]string{
+		"Content-Type": "text/plain",
+	}
+
 	if req.path == "/" {
-		return Response{status: "HTTP/1.1 200 OK"}
+		return Response{status: "HTTP/1.1 200 OK", headers: defaultHeaders}
 	}
 	if strings.HasPrefix(req.path, "/echo/") {
 		return handleEcho(req.path)
 	}
-	return Response{status: "HTTP/1.1 404 Not Found"}
+	return Response{status: "HTTP/1.1 404 Not Found", headers: defaultHeaders}
 }
 
 func handleEcho(path string) Response {

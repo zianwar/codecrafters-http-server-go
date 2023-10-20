@@ -50,11 +50,11 @@ func handleConn(conn net.Conn) {
 	} else if strings.HasPrefix(strings.ToLower(path), "/echo/") {
 		_, content, _ := strings.Cut(strings.TrimPrefix(path, "/"), "/")
 		response = strings.Join([]string{
-			"HTTP/1.1 200 OK",
-			"Content-Type: text/plain",
-			fmt.Sprintf("Content-Length: %d\r\n", len(content)),
+			"HTTP/1.1 200 OK\r\n",
+			"Content-Type: text/plain\r\n",
+			fmt.Sprintf("Content-Length: %d\r\n\r\n", len(content)),
 			content,
-		}, "\r\n")
+		}, "")
 	}
 	_, err = fmt.Fprintf(conn, "%s", response)
 	if err != nil {

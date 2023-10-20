@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 )
 
 func main() {
@@ -20,19 +21,35 @@ func main() {
 		log.Fatalf("Error accepting connection: %s", err.Error())
 	}
 
+	handleConn(conn)
+}
+
+func handleConn(conn net.Conn) {
+	defer conn.Close()
+
 	// read data from connection
 	buffer := make([]byte, 1024) // 1024 is a good start
-	_, err = conn.Read(buffer)
+	_, err := conn.Read(buffer)
 	if err != nil {
 		log.Printf("Error reading data: %v", err)
 	}
 
+	_, rest, ok := strings.Cut(string(buffer), " ")
+	if !ok {
+		log.Println("Invalid http request")
+	}
+	path, _, ok := strings.Cut(rest, " ")
+	if !ok {
+		log.Println("Invalid http request")
+	}
+
 	// send response
-	_, err = fmt.Fprintf(conn, "%s", "HTTP/1.1 200 OK\r\n\r\n")
+	response := "HTTP/1.1 400 Not Found\r\n\r\n"
+	if path == "/" {
+		response = "HTTP/1.1 200 OK\r\n\r\n"
+	}
+	_, err = fmt.Fprintf(conn, "%s", response)
 	if err != nil {
 		log.Fatalf("Failed to respond %v", err)
 	}
-
-	conn.Close()
-
 }

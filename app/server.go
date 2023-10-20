@@ -82,7 +82,7 @@ func NewRequest(s string) (*Request, error) {
 	if len(headers) > 0 {
 		for _, h := range strings.Split(headers, lineTerminator) {
 			k, v, _ := strings.Cut(h, ":")
-			req.headers[strings.ToLower(strings.TrimSpace(k))] = strings.ToLower(strings.TrimSpace(v))
+			req.headers[strings.ToLower(strings.TrimSpace(k))] = strings.TrimSpace(v)
 		}
 	}
 

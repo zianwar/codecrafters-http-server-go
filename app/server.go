@@ -56,7 +56,7 @@ type Response struct {
 func main() {
 	flag.Parse()
 
-	l, err := net.Listen("tcp", "localhost:"+port)
+	l, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Fatalln("Failed to bind to port " + port)
 	}
@@ -116,6 +116,11 @@ func NewRequest(conn net.Conn) (*Request, error) {
 				}
 				contentLength = v
 			}
+		}
+
+		// Request has no body
+		if newLinesCount == 1 && line == "" {
+			break
 		}
 
 		// Parse request body

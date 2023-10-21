@@ -107,7 +107,8 @@ func NewRequest(conn net.Conn) (*Request, error) {
 		// we are past first line and haven't found an empty line yet
 		if i > 0 && newLinesCount == 0 {
 			parts := strings.SplitN(line, ":", 2)
-			k, v := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+			k := strings.ToLower(strings.TrimSpace(parts[0]))
+			v := strings.TrimSpace(parts[1])
 			req.headers[k] = v
 			if strings.ToLower(k) == "content-length" {
 				v, err := strconv.Atoi(v)

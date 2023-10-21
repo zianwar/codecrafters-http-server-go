@@ -1,16 +1,10 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -31,26 +25,11 @@ var (
 	flDirectory string
 )
 
-func init() {
-	flag.StringVar(&flDirectory, "directory", "", "Absolute path to the directory to serve files from")
-}
-
 type HttpContentType string
 type HttpStatus string
 
-type Request struct {
-	method  string
-	path    string
-	headers map[string]string
-	body    string
-	proto   string
-}
-
-type Response struct {
-	status  HttpStatus
-	body    string
-	headers map[string]string
-	proto   string
+func init() {
+	flag.StringVar(&flDirectory, "directory", "", "Absolute path to the directory to serve files from")
 }
 
 func main() {
@@ -71,77 +50,6 @@ func main() {
 
 		go handleConn(conn)
 	}
-}
-
-func NewRequest(conn net.Conn) (*Request, error) {
-	req := &Request{headers: map[string]string{}}
-	scanner := bufio.NewScanner(conn)
-	scanner.Split(func(data []byte, atEOF bool) (int, []byte, error) {
-		advance, token, err := bufio.ScanLines(data, atEOF)
-		if i := bytes.IndexByte(data, '\n'); i < 0 {
-			return 0, data, bufio.ErrFinalToken
-		}
-		return advance, token, err
-	})
-
-	var i, newLinesCount, bodyLength, contentLength int
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		// Parse first line (status line)
-		if i == 0 {
-			statusLine := strings.Split(line, " ")
-			if len(line) < 3 {
-				return nil, fmt.Errorf("invalid status line")
-			}
-			req.method = statusLine[0]
-			req.path = statusLine[1]
-			req.proto = statusLine[2]
-		}
-
-		if line == "" {
-			newLinesCount++
-		}
-
-		// Parse a single request header as long as
-		// we are past first line and haven't found an empty line yet
-		if i > 0 && newLinesCount == 0 {
-			parts := strings.SplitN(line, ":", 2)
-			k := strings.ToLower(strings.TrimSpace(parts[0]))
-			v := strings.TrimSpace(parts[1])
-			req.headers[k] = v
-			if strings.ToLower(k) == "content-length" {
-				v, err := strconv.Atoi(v)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse content length header")
-				}
-				contentLength = v
-			}
-		}
-
-		// Request has no body
-		if newLinesCount == 1 && line == "" && contentLength == 0 {
-			break
-		}
-
-		// Parse request body
-		// As long as we reached an empty line and current line read is not empty
-		if newLinesCount == 1 && line != "" {
-			req.body += line
-			bodyLength += len(line) + 1
-		}
-		if newLinesCount > 1 {
-			bodyLength += 1
-			req.body += "\n" + line
-		}
-
-		if bodyLength != 0 && bodyLength == contentLength {
-			break
-		}
-		i++
-	}
-
-	return req, nil
 }
 
 func handleConn(conn net.Conn) {
@@ -168,43 +76,9 @@ func handleConn(conn net.Conn) {
 	}
 }
 
-func (r *Response) Raw() string {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("%s %s%s", r.proto, r.status, lineTerminator))
-	if len(r.headers) > 0 {
-		for k, v := range r.headers {
-			sb.WriteString(fmt.Sprintf("%s: %s%s", k, v, lineTerminator))
-		}
-	}
-	sb.WriteString(lineTerminator)
-	if len(r.body) > 0 {
-		sb.Write([]byte(r.body))
-	}
-	return sb.String()
-}
-
-func NewResponse(status HttpStatus, proto string, headers map[string]string, body string) *Response {
-	finalHeaders := map[string]string{}
-	for k, v := range headers {
-		finalHeaders[k] = v
-	}
-	resp := &Response{
-		status:  status,
-		body:    body,
-		headers: headers,
-		proto:   proto,
-	}
-	return resp
-}
-
 func handleRequest(req *Request) (*Response, error) {
-	defaultHeaders := map[string]string{
-		"Content-Type": string(contentTypeTextPlain),
-	}
-
 	if req.path == "/" {
-		return NewResponse(httpStatusOk, req.proto, defaultHeaders, ""), nil
+		return NewResponse(httpStatusOk, req.proto, nil, ""), nil
 	}
 
 	if req.method == "GET" {
@@ -224,9 +98,11 @@ func handleRequest(req *Request) (*Response, error) {
 		}
 	}
 
-	return NewResponse(httpStatusNotFound, req.proto, defaultHeaders, ""), nil
+	return NewResponse(httpStatusNotFound, req.proto, nil, ""), nil
 }
 
+// Handles GET /user-agent [USER-AGENT-HEADER]
+// Returns the value of the User-Agent header specified in the request.
 func handleGetUserAgent(req *Request) (*Response, error) {
 	body := ""
 	if v, ok := req.headers["user-agent"]; ok {
@@ -240,6 +116,8 @@ func handleGetUserAgent(req *Request) (*Response, error) {
 	return NewResponse(httpStatusOk, req.proto, headers, body), nil
 }
 
+// Handles GET /echo/<content>
+// Returns <content> in response body
 func handleGetEcho(req *Request) (*Response, error) {
 	path := strings.TrimPrefix(req.path, "/")
 	_, content, _ := strings.Cut(path, "/")
@@ -251,6 +129,8 @@ func handleGetEcho(req *Request) (*Response, error) {
 	return NewResponse(httpStatusOk, req.proto, headers, content), nil
 }
 
+// Handles GET /files/<filename>
+// Returns content of <filename> in response body
 func handleGetFile(req *Request) (*Response, error) {
 	if flDirectory == "" {
 		return nil, fmt.Errorf("missing required directory flag")
@@ -259,7 +139,7 @@ func handleGetFile(req *Request) (*Response, error) {
 	path := strings.TrimPrefix(req.path, "/")
 	_, filename, _ := strings.Cut(path, "/")
 	if filename == "" {
-		return nil, fmt.Errorf("missing filename from request path")
+		return nil, fmt.Errorf("missing filename from request path %s", path)
 	}
 
 	fileBytes, err, ok := getFileContent(filename)
@@ -269,17 +149,19 @@ func handleGetFile(req *Request) (*Response, error) {
 
 	headers := map[string]string{}
 	if !ok {
-		// file not found
+		// file not found, return 404
 		return NewResponse(httpStatusNotFound, req.proto, headers, ""), nil
 	}
 
-	// file found
+	// file found, set headers and returns 200 along with file content
 	headers["Content-Type"] = string(contentTypeApplicationOctetStream)
 	headers["Content-Length"] = fmt.Sprintf("%d", len(fileBytes))
 
 	return NewResponse(httpStatusOk, req.proto, headers, string(fileBytes)), nil
 }
 
+// Handles POST /files/<filename> <CONTENT_BODY>
+// Stores the provided <filename> to disk
 func handlePostFile(req *Request) (*Response, error) {
 	if flDirectory == "" {
 		return nil, fmt.Errorf("missing required directory flag")
@@ -297,47 +179,4 @@ func handlePostFile(req *Request) (*Response, error) {
 
 	headers := map[string]string{}
 	return NewResponse(httpStatusCreated, req.proto, headers, ""), nil
-}
-
-func getFileContent(filename string) ([]byte, error, bool) {
-	path := filepath.Join(flDirectory, filename)
-
-	// Return false if file doesn't exist
-	if _, err := os.Stat(path); err != nil {
-		return nil, nil, false
-	}
-
-	// Open file
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("unable to open file %s", path), false
-	}
-	defer file.Close()
-
-	// Read file
-	fileBytes, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("unable to read file %s", path), false
-	}
-
-	return fileBytes, nil, true
-}
-
-func writeFileContent(filename string, content string) error {
-	path := filepath.Join(flDirectory, filename)
-
-	// Create file
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("unable to create file %s: %v", path, err)
-	}
-	defer file.Close()
-
-	// Write to file
-	_, err = file.Write([]byte(content))
-	if err != nil {
-		return fmt.Errorf("unable to write file %s", path)
-	}
-
-	return nil
 }

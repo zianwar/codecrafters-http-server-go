@@ -120,7 +120,7 @@ func NewRequest(conn net.Conn) (*Request, error) {
 		}
 
 		// Request has no body
-		if newLinesCount == 1 && line == "" {
+		if newLinesCount == 1 && line == "" && contentLength == 0 {
 			break
 		}
 

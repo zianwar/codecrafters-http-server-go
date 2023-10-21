@@ -225,32 +225,49 @@ func handleGetFile(req *Request) (*Response, error) {
 	if flDirectory == "" {
 		return nil, fmt.Errorf("missing required directory flag")
 	}
-	// Check if directory already exists
-	if _, err := os.Stat(flDirectory); err != nil {
-		return nil, fmt.Errorf("cannot read directory %s", flDirectory)
-	}
 
 	path := strings.TrimPrefix(req.path, "/")
 	_, filename, _ := strings.Cut(path, "/")
 	if filename == "" {
-		return nil, fmt.Errorf("missing filename from path")
+		return nil, fmt.Errorf("missing filename from request path")
 	}
 
+	fileBytes, err, ok := getFileContent(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	headers := map[string]string{}
+	if !ok {
+		// file not found
+		return NewResponse(httpStatusNotFound, headers, ""), nil
+	}
+
+	// file found
+	headers["Content-Type"] = "application/octet-stream"
+	headers["Content-Length"] = fmt.Sprintf("%d", len(fileBytes))
+
+	return NewResponse(httpStatusOk, headers, string(fileBytes)), nil
+}
+
+func getFileContent(filename string) ([]byte, error, bool) {
 	fullPath := filepath.Join(flDirectory, filename)
+
+	// Return false if file doesn't exist
+	if _, err := os.Stat(fullPath); err != nil {
+		return nil, nil, false
+	}
+
 	file, err := os.Open(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("unable to open file %s", fullPath)
+		return nil, fmt.Errorf("unable to open file %s", fullPath), false
 	}
 	defer file.Close()
 
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read file %s", fullPath)
+		return nil, fmt.Errorf("unable to read file %s", fullPath), false
 	}
 
-	headers := map[string]string{
-		"Content-Type":   "application/octet-stream",
-		"Content-Length": fmt.Sprintf("%d", len(fileBytes)),
-	}
-	return NewResponse(httpStatusOk, headers, string(fileBytes)), nil
+	return fileBytes, nil, true
 }
